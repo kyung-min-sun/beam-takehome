@@ -154,7 +154,16 @@ func (r *Client) Echo(value string) (string, error) {
 	return response.Value, err
 }
 
-func scanDirectory(root string, lastChecked time.Time) ([]common.FileWatchInfo, error) {
+func findFile(files []common.FileWatchInfo, path string) (common.FileWatchInfo, bool) {
+	for _, file := range files {
+			if file.Path == path {
+					return file, true
+			}
+	}
+	return common.FileWatchInfo{}, false
+}
+
+func scanDirectory(root string) ([]common.FileWatchInfo, error) {
 	var files []common.FileWatchInfo
 
 	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
@@ -166,12 +175,24 @@ func scanDirectory(root string, lastChecked time.Time) ([]common.FileWatchInfo, 
 		if info.IsDir() {
 				return nil
 		}
+
+		files = append(files, common.FileWatchInfo{
+			FileInfo: info,
+			Path: path,
+		})
 		
-		// Read file data
+		return nil
+	})
+
+	return files, err
+}
+
+func getFileWatchPayload(root string, path string, info common.FileWatchInfo) *common.FileWatchPayload {
+			// Read file data
 		data, err := os.ReadFile(path)
 		if err != nil {
 				fmt.Printf("Error reading file %s: %v\n", path, err)
-				return nil // Continue with other files
+				return nil
 		}
 		
 		// Get relative path
@@ -180,50 +201,67 @@ func scanDirectory(root string, lastChecked time.Time) ([]common.FileWatchInfo, 
 				relPath = path
 		}
 
-		fileInfo := common.FileWatchInfo{
+		fileInfo := common.FileWatchPayload{
 				Path:   relPath,
-				Name:   info.Name(),
-				Size:   info.Size(),
-				Data:   data,
 				Base64: base64.StdEncoding.EncodeToString(data),
+				Deleted: false,
 		}
 
-		if info.ModTime().After(lastChecked) {
-			fmt.Printf("File %s has been modified\n", relPath)
-			files = append(files, fileInfo)
-		}
-		
-		return nil
-	})
-
-	return files, err
+	return &fileInfo
 }
 
-func (r *Client) FileWatch(lastChecked time.Time) (string, error) {
-	requestId := uuid.NewString()
-	files, err := scanDirectory(r.Directory, lastChecked)
-	if err != nil {
-		return "", err
+func (r *Client) FileWatch(lastChecked time.Time, existingFiles *[]common.FileWatchInfo) ([]common.FileWatchInfo, error) {
+	if existingFiles == nil {
+		existingFiles = &[]common.FileWatchInfo{}
 	}
 
+	requestId := uuid.NewString()
+	newFiles, err := scanDirectory(r.Directory)
+	if err != nil {
+		return newFiles, err
+	}
+
+	requestFiles := []common.FileWatchPayload{}
+
+	for _, file := range newFiles {
+		if file.ModTime().After(lastChecked) {
+			payload := getFileWatchPayload(r.Directory, file.Path, file)
+			if payload != nil {
+				requestFiles = append(requestFiles, *payload)
+			}
+		}
+	}
+
+	for _, file := range *existingFiles {
+		_, exists := findFile(newFiles, file.Path);
+		if !exists {
+			payload := common.FileWatchPayload{
+				Path: file.Path,
+				Deleted: true,
+			}
+			requestFiles = append(requestFiles, payload)
+		}
+	}
+
+	fmt.Printf("requestFiles: %v\n", requestFiles)
 	var request *common.FileWatchRequest = &common.FileWatchRequest{
 		BaseRequest: common.BaseRequest{
 			RequestId:   requestId,
 			RequestType: string(common.FileWatch),
 		},
-		Files: files,
+		Files: requestFiles,
 	}
 
 	payload, err := json.Marshal(request)
 	if err != nil {
-		return "", err
+		return newFiles, err
 	}
 
 	r.channels[requestId] = make(chan []byte)
 
 	err = r.tx(payload)
 	if err != nil {
-		return "", err
+		return newFiles, err
 	}
 
 	var response common.FileWatchResponse = common.FileWatchResponse{}
@@ -232,8 +270,8 @@ func (r *Client) FileWatch(lastChecked time.Time) (string, error) {
 	err = json.Unmarshal(msg, &response)
 	if err != nil {
 		log.Println("Unable to handle file watch response: ", err)
-		return "", err
+		return newFiles, err
 	}
 
-	return response.Value, err
+	return newFiles, err
 }

@@ -1,5 +1,7 @@
 package common
 
+import "os"
+
 type RequestType string
 
 const (
@@ -29,8 +31,7 @@ type EchoResponse struct {
 
 type FileWatchRequest struct {
 	BaseRequest
-	Files []FileWatchInfo
-	///
+	Files []FileWatchPayload
 }
 
 type FileWatchResponse struct {
@@ -38,10 +39,13 @@ type FileWatchResponse struct {
 	Value string
 }
 
-type FileWatchInfo struct {
+type FileWatchPayload struct {
 	Path     string
-	Name     string
-	Size     int64
-	Data     []byte
 	Base64   string
+	Deleted  bool
+}
+
+type FileWatchInfo struct {
+	os.FileInfo
+	Path string
 }
