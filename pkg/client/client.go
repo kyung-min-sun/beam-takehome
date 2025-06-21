@@ -187,7 +187,7 @@ func scanDirectory(root string) ([]common.FileWatchInfo, error) {
 	return files, err
 }
 
-func getFileWatchPayload(root string, path string, info common.FileWatchInfo) *common.FileWatchPayload {
+func getFileWatchPayload(root string, path string) *common.FileWatchPayload {
 			// Read file data
 		data, err := os.ReadFile(path)
 		if err != nil {
@@ -225,7 +225,7 @@ func (r *Client) FileWatch(lastChecked time.Time, existingFiles *[]common.FileWa
 
 	for _, file := range newFiles {
 		if file.ModTime().After(lastChecked) {
-			payload := getFileWatchPayload(r.Directory, file.Path, file)
+			payload := getFileWatchPayload(r.Directory, file.Path)
 			if payload != nil {
 				requestFiles = append(requestFiles, *payload)
 			}
@@ -235,12 +235,13 @@ func (r *Client) FileWatch(lastChecked time.Time, existingFiles *[]common.FileWa
 	for _, file := range *existingFiles {
 		_, exists := findFile(newFiles, file.Path);
 		if !exists {
+			relPath, _ := filepath.Rel(r.Directory, file.Path)
 			payload := common.FileWatchPayload{
-				Path: file.Path,
+				Path: relPath,
 				Deleted: true,
 			}
 			requestFiles = append(requestFiles, payload)
-		}
+	}
 	}
 
 	fmt.Printf("requestFiles: %v\n", requestFiles)
