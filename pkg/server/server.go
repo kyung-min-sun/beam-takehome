@@ -57,6 +57,9 @@ func handleMessage(w http.ResponseWriter, r *http.Request) {
 		switch request.RequestType {
 		case string(common.Echo):
 			go HandleEcho(msg, &client)
+		case string(common.FileWatch):
+			go HandleFileWatch(msg, &client, "./server-files")
+	
 		}
 	}
 }

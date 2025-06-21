@@ -30,6 +30,7 @@ type EchoResponse struct {
 type FileWatchRequest struct {
 	BaseRequest
 	Files []FileWatchInfo
+	///
 }
 
 type FileWatchResponse struct {

@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
@@ -153,7 +154,7 @@ func (r *Client) Echo(value string) (string, error) {
 	return response.Value, err
 }
 
-func scanDirectory(root string) ([]common.FileWatchInfo, error) {
+func scanDirectory(root string, lastChecked time.Time) ([]common.FileWatchInfo, error) {
 	var files []common.FileWatchInfo
 
 	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
@@ -186,9 +187,11 @@ func scanDirectory(root string) ([]common.FileWatchInfo, error) {
 				Data:   data,
 				Base64: base64.StdEncoding.EncodeToString(data),
 		}
-		
-		files = append(files, fileInfo)
-		fmt.Printf("Found file: %s (size: %d bytes)\n", relPath, info.Size())
+
+		if info.ModTime().After(lastChecked) {
+			fmt.Printf("File %s has been modified\n", relPath)
+			files = append(files, fileInfo)
+		}
 		
 		return nil
 	})
@@ -196,9 +199,9 @@ func scanDirectory(root string) ([]common.FileWatchInfo, error) {
 	return files, err
 }
 
-func (r *Client) FileWatch(value string) (string, error) {
+func (r *Client) FileWatch(lastChecked time.Time) (string, error) {
 	requestId := uuid.NewString()
-	files, err := scanDirectory(r.Directory)
+	files, err := scanDirectory(r.Directory, lastChecked)
 	if err != nil {
 		return "", err
 	}

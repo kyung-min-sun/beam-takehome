@@ -15,17 +15,23 @@ func main() {
 		log.Fatal(err)
 	}
 
+
 	someMessage := "hello there"
+	lastChecked := time.Now()
 	for {
 
 		log.Printf("Sending: '%s'", someMessage)
 
-		value, err := c.Echo(someMessage)
-		if err != nil {
+		echoValue, echoErr := c.Echo(someMessage)
+		files, filesErr := c.FileWatch(lastChecked)
+		lastChecked = time.Now()
+
+		if echoErr != nil || filesErr != nil {
 			log.Fatal("Unable to send request.")
 		}
 
-		log.Printf("Received: '%s'", value)
+		log.Printf("Received: '%s'", echoValue)
+		log.Printf("Received: '%s'", files)
 
 		time.Sleep(time.Second)
 	}
