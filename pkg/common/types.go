@@ -4,6 +4,7 @@ type RequestType string
 
 const (
 	Echo RequestType = "ECHO"
+	FileWatch RequestType = "FILE_WATCH"
 )
 
 type BaseRequest struct {
@@ -24,4 +25,22 @@ type EchoRequest struct {
 type EchoResponse struct {
 	BaseResponse
 	Value string
+}
+
+type FileWatchRequest struct {
+	BaseRequest
+	Files []FileWatchInfo
+}
+
+type FileWatchResponse struct {
+	BaseResponse
+	Value string
+}
+
+type FileWatchInfo struct {
+	Path     string
+	Name     string
+	Size     int64
+	Data     []byte
+	Base64   string
 }

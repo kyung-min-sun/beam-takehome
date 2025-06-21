@@ -1,8 +1,12 @@
 package client
 
 import (
+	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"log"
+	"os"
+	"path/filepath"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
@@ -143,6 +147,88 @@ func (r *Client) Echo(value string) (string, error) {
 	err = json.Unmarshal(msg, &response)
 	if err != nil {
 		log.Println("Unable to handle echo response: ", err)
+		return "", err
+	}
+
+	return response.Value, err
+}
+
+func scanDirectory(root string) ([]common.FileWatchInfo, error) {
+	var files []common.FileWatchInfo
+
+	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+				return err
+		}
+		
+		// Skip directories
+		if info.IsDir() {
+				return nil
+		}
+		
+		// Read file data
+		data, err := os.ReadFile(path)
+		if err != nil {
+				fmt.Printf("Error reading file %s: %v\n", path, err)
+				return nil // Continue with other files
+		}
+		
+		// Get relative path
+		relPath, err := filepath.Rel(root, path)
+		if err != nil {
+				relPath = path
+		}
+
+		fileInfo := common.FileWatchInfo{
+				Path:   relPath,
+				Name:   info.Name(),
+				Size:   info.Size(),
+				Data:   data,
+				Base64: base64.StdEncoding.EncodeToString(data),
+		}
+		
+		files = append(files, fileInfo)
+		fmt.Printf("Found file: %s (size: %d bytes)\n", relPath, info.Size())
+		
+		return nil
+	})
+
+	return files, err
+}
+
+func (r *Client) FileWatch(value string) (string, error) {
+	requestId := uuid.NewString()
+	files, err := scanDirectory(r.Directory)
+	if err != nil {
+		return "", err
+	}
+
+	var request *common.FileWatchRequest = &common.FileWatchRequest{
+		BaseRequest: common.BaseRequest{
+			RequestId:   requestId,
+			RequestType: string(common.FileWatch),
+		},
+		Files: files,
+	}
+
+	payload, err := json.Marshal(request)
+	if err != nil {
+		return "", err
+	}
+
+	r.channels[requestId] = make(chan []byte)
+
+	err = r.tx(payload)
+	if err != nil {
+		return "", err
+	}
+
+	var response common.FileWatchResponse = common.FileWatchResponse{}
+
+	msg := <-r.channels[requestId]
+	err = json.Unmarshal(msg, &response)
+	if err != nil {
+		log.Println("Unable to handle file watch response: ", err)
 		return "", err
 	}
 
